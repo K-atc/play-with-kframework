@@ -1,3 +1,6 @@
 /simple-bof
 /simple-bof.afl
 /simple-bof.kcc
+/oob-read
+/oob-read.afl
+/oob-read.kcc
