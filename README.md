@@ -27,7 +27,7 @@ In general, triage of crash inputs produced by fuzzers is hard because crash inp
 This demo illustrates how to handle crash inputs to see cause of bug using [rv-match](https://runtimeverification.com/match/) (also known as [c-semantics](https://github.com/kframework/c-semantics)).
 
 ### Step 0) About demo `simple-bof`
-[simple-bof.c](vuln-sample/simple-bof.c) contains buffer overflow bug. Let's see how we triage crash reported by AFL, using K Framework.
+[simple-bof.c](vuln-samples/simple-bof.c) contains buffer overflow bug.
 
 ### Step 1) Check proof of vulnerability
 ```shell
