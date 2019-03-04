@@ -7,7 +7,7 @@ http://www.kframework.org/
 
 Requirements
 ----
-* `kcc` ... [kcc](https://runtimeverification.com/match/download/) must be located at `$PATH`
+* `kcc` ... `kcc` provided by [rv-match](https://runtimeverification.com/match/) must be located at `$PATH`
     * I recommend *runtime verification*'s rv-match 
 * `afl-fuzz` ... Build AFL beforehand. I assume `afl-fuzz` is located at `~/bin/afl-2.52b/`
 
@@ -20,10 +20,14 @@ make
 ```
 
 
-Let's play!
+Let's play with fuzzer!
 ----
+In general, triage of crash inputs produced by fuzzers is hard because crash inputs tells existence of some crash bug but not tells root cause of the bug.
+
+This demo illustrates how to handle crash inputs to see cause of bug using [rv-match](https://runtimeverification.com/match/) (also known as [c-semantics](https://github.com/kframework/c-semantics)).
+
 ### Step 0) About demo `simple-bof`
-[simple-bof.c](simple-bof.c) contains buffer overflow bug. Let's see how we triage crash reported by AFL, using K Framework.
+[simple-bof.c](vuln-sample/simple-bof.c) contains buffer overflow bug. Let's see how we triage crash reported by AFL, using K Framework.
 
 ### Step 1) Check proof of vulnerability
 ```shell
@@ -42,17 +46,66 @@ Aborted
 ```
 
 ### Step 2) Perform fuzzing with AFL
+Run AFL with following way.
+
 ```shell
 rm -rf afl-output/simple-bof
 ~/bin/afl-2.52b/afl-fuzz -i fuzz/simple-bof/ -o afl-output/simple-bof ./simple-bof.afl
 ```
 
-### Step 3) Verify crash input with K Framework (c-semantics)
+### Step 3) Invest crash input
+Let's see what crash input causes with gdb-peda.
+
+```
+tomori@nao:~/project/play-with-kramework/vuln-samples$ gdb ./simple-bof
+gdb-peda$ r < afl-output/simple-bof/crashes/id:000000,sig:06,src:000000,op:havoc,rep:16 
+Starting program: /home/tomori/project/play-with-kramework/vuln-samples/simple-bof < afl-output/simple-bof/crashes/id:000000,sig:06,src:000000,op:havoc,rep:16
+message length = 6666666
+message = 6666666666666666e
+*** stack smashing detected ***: /home/tomori/project/play-with-kramework/vuln-samples/simple-bof terminated
+
+Program received signal SIGABRT, Aborted.
+
+... snipped ...
+Stopped reason: SIGABRT
+0x00007ffff7a42428 in __GI_raise (sig=sig@entry=0x6) at ../sysdeps/unix/sysv/linux/raise.c:54
+54	../sysdeps/unix/sysv/linux/raise.c: No such file or directory.
+gdb-peda$ bt
+#0  0x00007ffff7a42428 in __GI_raise (sig=sig@entry=0x6) at ../sysdeps/unix/sysv/linux/raise.c:54
+#1  0x00007ffff7a4402a in __GI_abort () at abort.c:89
+#2  0x00007ffff7a847ea in __libc_message (do_abort=do_abort@entry=0x1, 
+    fmt=fmt@entry=0x7ffff7b9c49f "*** %s ***: %s terminated\n")
+    at ../sysdeps/posix/libc_fatal.c:175
+#3  0x00007ffff7b2615c in __GI___fortify_fail (msg=<optimized out>, 
+    msg@entry=0x7ffff7b9c481 "stack smashing detected") at fortify_fail.c:37
+#4  0x00007ffff7b26100 in __stack_chk_fail () at stack_chk_fail.c:28
+#5  0x000000000040081c in main ()
+#6  0x00007ffff7a2d830 in __libc_start_main (main=0x400726 <main>, argc=0x1, argv=0x7fffffffde68, 
+    init=<optimized out>, fini=<optimized out>, rtld_fini=<optimized out>, 
+    stack_end=0x7fffffffde58) at ../csu/libc-start.c:291
+#7  0x0000000000400659 in _start ()
+
+gdb-peda$ pdisas main 
+Dump of assembler code for function main:
+... snipped ...
+   0x0000000000400803 <+221>:	mov    eax,0x0
+   0x0000000000400808 <+226>:	mov    rcx,QWORD PTR [rbp-0x8]
+   0x000000000040080c <+230>:	xor    rcx,QWORD PTR fs:0x28
+   0x0000000000400815 <+239>:	je     0x40081c <main+246>
+   0x0000000000400817 <+241>:	call   0x4005c0 <__stack_chk_fail@plt>
+   0x000000000040081c <+246>:	leave  
+   0x000000000040081d <+247>:	ret    
+End of assembler dump.
+```
+
+We see that cause of crash is failure on `__stack_chk_fail()` (that is, stack smashing). But we can't see why stack smashing has happen.
+
+### Step 4) Verify crash input with K Framework (c-semantics)
 ```shell
 cat SOME_CRASH_INPUT | ./simple-bof.kcc
 ```
 
-For example:
+We see that cause of that stack smashing is buffer overflow (out-of-bounds write).
 
 ```
 tomori@nao:~/project/play-with-kramework/vuln-samples$ cat afl-output/simple-bof/crashes/id\:000000\,sig\:06\,src\:000000\,op\:havoc\,rep\:16 | ./simple-bof.kcc
