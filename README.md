@@ -8,7 +8,7 @@ http://www.kframework.org/
 Requirements
 ----
 * `kcc` ... `kcc` provided by [rv-match](https://runtimeverification.com/match/) must be located at `$PATH`
-    * I recommend *runtime verification*'s rv-match 
+    * I recommend *runtime verification*'s rv-match for ease of installation
 * `afl-fuzz` ... Build AFL beforehand. I assume `afl-fuzz` is located at `~/bin/afl-2.52b/`
 
 
